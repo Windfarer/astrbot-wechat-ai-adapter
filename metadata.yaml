@@ -1,6 +1,6 @@
 name: astrbot_wechat_ai_adapter
 display_name: WeChat AI Platform Adapter
 desc: AstrBot platform adapter for wechat-ai MCP polling and message delivery.
-version: v0.1.0
+version: v0.1.1
 author: windfarer
 repo: https://github.com/windfarer/astrbot-wechat-ai-adapter
