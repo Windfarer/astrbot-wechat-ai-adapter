@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.vscode/
+*.pyc
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+build/
+dist/
+state.json
