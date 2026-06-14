@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from group_wake import should_prepend_group_at, should_wake_group_message
 from mcp_client import MCPToolPayload, WechatAIMCPClient, WechatAIMCPError, parse_tool_payload
+from polling_state import message_fingerprint
 
 
 class FakeTextContent:
@@ -121,3 +122,17 @@ def test_group_message_can_be_forced_to_wake_without_mention() -> None:
     )
 
     assert should_wake is True
+
+
+def test_message_fingerprint_uses_stable_session_key_not_display_name() -> None:
+    message = {
+        "sender_name": "alice",
+        "timestamp": 1234567890,
+        "content": "hello",
+        "type": "text",
+    }
+
+    first = message_fingerprint(message, "wxid_alice")
+    second = message_fingerprint(message, "Alice New Remark")
+
+    assert first != second

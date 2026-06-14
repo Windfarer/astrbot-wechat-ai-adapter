@@ -88,7 +88,10 @@ class WechatAIPlatformAdapter(Platform):
         message = AstrBotMessage()
         message.self_id = self._self_id
         message.session_id = session.session_id
-        message.raw_message = {"contact_name": session.session_id}
+        message.raw_message = {
+            "contact_id": session.session_id,
+            "contact_name": session.session_id,
+        }
 
         event = WechatAIPlatformEvent(
             message_str="",
@@ -263,14 +266,20 @@ class WechatAIPlatformAdapter(Platform):
 
         abm = AstrBotMessage()
         abm.type = MessageType.GROUP_MESSAGE if envelope.is_group else MessageType.FRIEND_MESSAGE
-        abm.group_id = envelope.contact_name if envelope.is_group else ""
-        abm.session_id = envelope.contact_name
+        abm.group_id = envelope.contact_id if envelope.is_group else ""
+        abm.session_id = envelope.contact_id
         abm.message_id = str(data.get("server_id") or data.get("message_id") or data.get("local_id") or data.get("id") or "")
         abm.self_id = self._self_id
         abm.sender = MessageMember(user_id=str(sender_id), nickname=str(sender_name or envelope.contact_name))
         abm.message_str = display_text
         abm.message = components
-        abm.raw_message = {**data, "contact_name": envelope.contact_name, "is_group": envelope.is_group}
+        abm.raw_message = {
+            **data,
+            "contact_id": envelope.contact_id,
+            "contact_name": envelope.contact_name,
+            "session_key": envelope.session_key,
+            "is_group": envelope.is_group,
+        }
         if data.get("create_time"):
             abm.timestamp = data.get("create_time")
         elif data.get("timestamp"):
