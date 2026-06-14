@@ -23,12 +23,20 @@ class WechatAIPlatformEvent(AstrMessageEvent):
         mcp_url: str,
         mcp_token: str,
         timeout_seconds: float,
+        reconnect_retries: int,
+        reconnect_backoff_initial_seconds: float,
+        reconnect_backoff_max_seconds: float,
+        reconnect_backoff_multiplier: float,
         shared_media_dir: str,
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.mcp_url = mcp_url
         self.mcp_token = mcp_token
         self.timeout_seconds = timeout_seconds
+        self.reconnect_retries = reconnect_retries
+        self.reconnect_backoff_initial_seconds = reconnect_backoff_initial_seconds
+        self.reconnect_backoff_max_seconds = reconnect_backoff_max_seconds
+        self.reconnect_backoff_multiplier = reconnect_backoff_multiplier
         self.shared_media_dir = shared_media_dir
 
     def _resolve_recipient_name(self) -> str:
@@ -62,6 +70,10 @@ class WechatAIPlatformEvent(AstrMessageEvent):
             self.mcp_url,
             self.mcp_token,
             timeout_seconds=self.timeout_seconds,
+            reconnect_retries=self.reconnect_retries,
+            reconnect_backoff_initial_seconds=self.reconnect_backoff_initial_seconds,
+            reconnect_backoff_max_seconds=self.reconnect_backoff_max_seconds,
+            reconnect_backoff_multiplier=self.reconnect_backoff_multiplier,
         ) as client:
 
             async def flush_text() -> None:

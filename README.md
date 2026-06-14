@@ -36,6 +36,10 @@
   "mcp_url": "http://localhost:8100/mcp",
   "mcp_token": "replace-with-real-token",
   "mcp_timeout_seconds": 30,
+  "mcp_reconnect_retries": 6,
+  "mcp_reconnect_backoff_initial_seconds": 1,
+  "mcp_reconnect_backoff_max_seconds": 30,
+  "mcp_reconnect_backoff_multiplier": 2,
   "poll_interval_seconds": 5,
   "recent_chats_limit": 20,
   "recent_messages_limit": 30,
@@ -50,6 +54,7 @@
 ## 说明
 
 - `mcp_token` 不应使用 `wechat-ai` 文档中给出的不安全默认值
+- 当 MCP 连接因服务重启或长时间不可用而失败时，适配器会按照 `mcp_reconnect_retries` 和退避参数自动多次重连
 - 出站群聊中的 `@` 会映射到 MCP `send_text_msg.at_user_name`；适配器不会把 `@name` 直接拼接进文本内容
 - 入站群消息只有在表现为 `@机器人昵称 ...`、包含类似 `is_at_me` 的字段，或启用了 `wake_all_group_messages` 时，才会触发 AstrBot 回复
 - 当前版本不会自动下载远程图片 URL；如需发送图片，请先将文件放到 `shared_media_dir` 中

@@ -51,6 +51,11 @@ def _pick_items(payload: dict[str, Any], *keys: str) -> list[dict[str, Any]]:
     default_config_tmpl={
         "mcp_url": "http://localhost:8100/mcp",
         "mcp_token": "replace-with-real-token",
+        "mcp_timeout_seconds": 30,
+        "mcp_reconnect_retries": 6,
+        "mcp_reconnect_backoff_initial_seconds": 1,
+        "mcp_reconnect_backoff_max_seconds": 30,
+        "mcp_reconnect_backoff_multiplier": 2,
         "poll_interval_seconds": 5,
         "recent_chats_limit": 20,
         "recent_messages_limit": 30,
@@ -68,6 +73,10 @@ class WechatAIPlatformAdapter(Platform):
         self.mcp_url = str(platform_config.get("mcp_url", "http://localhost:8100/mcp"))
         self.mcp_token = str(platform_config.get("mcp_token", ""))
         self.mcp_timeout_seconds = float(platform_config.get("mcp_timeout_seconds", 30))
+        self.mcp_reconnect_retries = int(platform_config.get("mcp_reconnect_retries", 6))
+        self.mcp_reconnect_backoff_initial_seconds = float(platform_config.get("mcp_reconnect_backoff_initial_seconds", 1))
+        self.mcp_reconnect_backoff_max_seconds = float(platform_config.get("mcp_reconnect_backoff_max_seconds", 30))
+        self.mcp_reconnect_backoff_multiplier = float(platform_config.get("mcp_reconnect_backoff_multiplier", 2))
         self.poll_interval_seconds = float(platform_config.get("poll_interval_seconds", 5))
         self.recent_chats_limit = int(platform_config.get("recent_chats_limit", 20))
         self.recent_messages_limit = int(platform_config.get("recent_messages_limit", 30))
@@ -101,6 +110,10 @@ class WechatAIPlatformAdapter(Platform):
             mcp_url=self.mcp_url,
             mcp_token=self.mcp_token,
             timeout_seconds=self.mcp_timeout_seconds,
+            reconnect_retries=self.mcp_reconnect_retries,
+            reconnect_backoff_initial_seconds=self.mcp_reconnect_backoff_initial_seconds,
+            reconnect_backoff_max_seconds=self.mcp_reconnect_backoff_max_seconds,
+            reconnect_backoff_multiplier=self.mcp_reconnect_backoff_multiplier,
             shared_media_dir=self.shared_media_dir,
         )
         await event.send(message_chain)
@@ -120,6 +133,10 @@ class WechatAIPlatformAdapter(Platform):
             base_url=self.mcp_url,
             token=self.mcp_token,
             timeout_seconds=self.mcp_timeout_seconds,
+            reconnect_retries=self.mcp_reconnect_retries,
+            reconnect_backoff_initial_seconds=self.mcp_reconnect_backoff_initial_seconds,
+            reconnect_backoff_max_seconds=self.mcp_reconnect_backoff_max_seconds,
+            reconnect_backoff_multiplier=self.mcp_reconnect_backoff_multiplier,
         )
         await self.client.connect()
 
@@ -298,6 +315,10 @@ class WechatAIPlatformAdapter(Platform):
             mcp_url=self.mcp_url,
             mcp_token=self.mcp_token,
             timeout_seconds=self.mcp_timeout_seconds,
+            reconnect_retries=self.mcp_reconnect_retries,
+            reconnect_backoff_initial_seconds=self.mcp_reconnect_backoff_initial_seconds,
+            reconnect_backoff_max_seconds=self.mcp_reconnect_backoff_max_seconds,
+            reconnect_backoff_multiplier=self.mcp_reconnect_backoff_multiplier,
             shared_media_dir=self.shared_media_dir,
         )
         self.commit_event(message_event)

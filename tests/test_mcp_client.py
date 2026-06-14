@@ -136,3 +136,49 @@ def test_message_fingerprint_uses_stable_session_key_not_display_name() -> None:
     second = message_fingerprint(message, "Alice New Remark")
 
     assert first != second
+
+
+def test_call_tool_reconnects_after_transport_failure() -> None:
+    client = WechatAIMCPClient(
+        "http://example.com/mcp",
+        "token",
+        reconnect_retries=3,
+        reconnect_backoff_initial_seconds=0.5,
+        reconnect_backoff_max_seconds=5,
+        reconnect_backoff_multiplier=2,
+    )
+
+    class FailingSession:
+        async def call_tool(self, name: str, arguments=None):
+            raise RuntimeError("connection closed")
+
+    class HealthySession:
+        async def call_tool(self, name: str, arguments=None):
+            return make_result(text='{"status": "ok", "messages": []}')
+
+    async def scenario() -> MCPToolPayload:
+        sessions = iter([FailingSession(), FailingSession(), HealthySession()])
+        sleep_calls: list[float] = []
+
+        async def fake_connect_state(target_state):
+            target_state.session = next(sessions)
+
+        async def fake_close_state(_state, *, discard_from_cache: bool):
+            _state.session = None
+
+        async def fake_sleep(delay: float):
+            sleep_calls.append(delay)
+
+        client._connect_state = fake_connect_state  # type: ignore[method-assign]
+        client._close_state = fake_close_state  # type: ignore[method-assign]
+        client._sleep = fake_sleep
+
+        await client.connect()
+        payload = await client.call_tool("get_recent_chats")
+        assert sleep_calls == [0.5, 1.0]
+        return payload
+
+    payload = asyncio.run(scenario())
+
+    assert payload.status == "ok"
+    assert payload.data["messages"] == []

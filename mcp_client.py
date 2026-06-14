@@ -80,12 +80,26 @@ def parse_tool_payload(result: Any) -> MCPToolPayload:
 
 
 class WechatAIMCPClient:
-    def __init__(self, base_url: str, token: str, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        timeout_seconds: float = 30.0,
+        reconnect_retries: int = 3,
+        reconnect_backoff_initial_seconds: float = 1.0,
+        reconnect_backoff_max_seconds: float = 10.0,
+        reconnect_backoff_multiplier: float = 2.0,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.timeout_seconds = timeout_seconds
+        self.reconnect_retries = max(0, int(reconnect_retries))
+        self.reconnect_backoff_initial_seconds = max(0.0, float(reconnect_backoff_initial_seconds))
+        self.reconnect_backoff_max_seconds = max(0.0, float(reconnect_backoff_max_seconds))
+        self.reconnect_backoff_multiplier = max(1.0, float(reconnect_backoff_multiplier))
         self._state_by_loop: dict[asyncio.AbstractEventLoop, _LoopClientState] = {}
         self._state_guard = threading.Lock()
+        self._sleep = asyncio.sleep
 
     async def __aenter__(self) -> "WechatAIMCPClient":
         await self.connect()
@@ -146,13 +160,13 @@ class WechatAIMCPClient:
     async def connect(self) -> None:
         await self._ensure_connected()
 
-    async def close(self) -> None:
-        loop = asyncio.get_running_loop()
-        with self._state_guard:
-            state = self._state_by_loop.pop(loop, None)
-
-        if state is None:
-            return
+    async def _close_state(self, state: _LoopClientState, *, discard_from_cache: bool) -> None:
+        if discard_from_cache:
+            loop = asyncio.get_running_loop()
+            with self._state_guard:
+                cached = self._state_by_loop.get(loop)
+                if cached is state:
+                    self._state_by_loop.pop(loop, None)
 
         exit_stack = state.exit_stack
         http_client = state.http_client
@@ -167,13 +181,53 @@ class WechatAIMCPClient:
         if http_client is not None:
             await http_client.aclose()
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> MCPToolPayload:
-        state = await self._ensure_connected()
-        if state.session is None:
-            raise WechatAIMCPError("MCP client is not connected")
+    async def _reset_current_state(self) -> None:
+        state = self._get_or_create_state()
+        async with state.connect_lock:
+            await self._close_state(state, discard_from_cache=False)
 
-        async with state.call_lock:
-            result = await state.session.call_tool(name, arguments=arguments or {})
+    async def close(self) -> None:
+        loop = asyncio.get_running_loop()
+        with self._state_guard:
+            state = self._state_by_loop.pop(loop, None)
+
+        if state is None:
+            return
+
+        await self._close_state(state, discard_from_cache=False)
+
+    def _backoff_delay_for_retry(self, retry_index: int) -> float:
+        delay = self.reconnect_backoff_initial_seconds * (self.reconnect_backoff_multiplier ** retry_index)
+        return min(delay, self.reconnect_backoff_max_seconds)
+
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> MCPToolPayload:
+        last_exc: Exception | None = None
+        result = None
+        for attempt in range(self.reconnect_retries + 1):
+            state = await self._ensure_connected()
+            if state.session is None:
+                raise WechatAIMCPError("MCP client is not connected")
+
+            try:
+                async with state.call_lock:
+                    result = await state.session.call_tool(name, arguments=arguments or {})
+                break
+            except WechatAIMCPError:
+                raise
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= self.reconnect_retries:
+                    raise WechatAIMCPError(f"MCP tool {name} transport failed: {exc}") from exc
+                await self._reset_current_state()
+                delay = self._backoff_delay_for_retry(attempt)
+                if delay > 0:
+                    await self._sleep(delay)
+        else:
+            raise WechatAIMCPError(f"MCP tool {name} transport failed: {last_exc}")
+
+        if result is None:
+            raise WechatAIMCPError(f"MCP tool {name} transport failed: {last_exc}")
+
         payload = parse_tool_payload(result)
         if payload.status in {
             "blocked",
@@ -244,8 +298,24 @@ class WechatAIMCPClient:
 
 
 @asynccontextmanager
-async def open_mcp_client(base_url: str, token: str, timeout_seconds: float = 30.0) -> AsyncIterator[WechatAIMCPClient]:
-    client = WechatAIMCPClient(base_url=base_url, token=token, timeout_seconds=timeout_seconds)
+async def open_mcp_client(
+    base_url: str,
+    token: str,
+    timeout_seconds: float = 30.0,
+    reconnect_retries: int = 3,
+    reconnect_backoff_initial_seconds: float = 1.0,
+    reconnect_backoff_max_seconds: float = 10.0,
+    reconnect_backoff_multiplier: float = 2.0,
+) -> AsyncIterator[WechatAIMCPClient]:
+    client = WechatAIMCPClient(
+        base_url=base_url,
+        token=token,
+        timeout_seconds=timeout_seconds,
+        reconnect_retries=reconnect_retries,
+        reconnect_backoff_initial_seconds=reconnect_backoff_initial_seconds,
+        reconnect_backoff_max_seconds=reconnect_backoff_max_seconds,
+        reconnect_backoff_multiplier=reconnect_backoff_multiplier,
+    )
     try:
         await client.connect()
         yield client
